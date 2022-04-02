@@ -3,7 +3,8 @@
 #include <iostream>
 using namespace std;
 #include <vector>
-
+int INT_M = 1000;
+int idleTime = 0;
 struct p
 {
 public:
@@ -17,6 +18,7 @@ public:
 
 void updateMyP(p &selectedP, int &currentArrivalTime,vector <p> &ready,vector <p> &IO, vector <p>& pValue)
 {
+
 	//selectedP.totalIOTime += selectedP.cpuIO[0][1];
 	// update my current p values for averages
 	int loc = 0;
@@ -27,7 +29,17 @@ void updateMyP(p &selectedP, int &currentArrivalTime,vector <p> &ready,vector <p
 			break;
 		}
 	}
+	pValue[loc].totalIOTime += pValue[loc].cpuIO[0][1];
+	pValue[loc].totalIOTime += pValue[loc].cpuIO[0][0];
+	//cout << pValue[loc].id << " : " << pValue[loc].arrivalTime << endl;
+	if (pValue[loc].arrivalTime == 0)
+	{
+		//cout << "first burst" << endl;
+		//cout << pValue[loc].id << endl;
+		pValue[loc].firstBurstTime = currentArrivalTime - pValue[loc].cpuIO[0][0];
+	}
 	pValue[loc].arrivalTime = currentArrivalTime + pValue[loc].cpuIO[0][1];
+	pValue[loc].lastBurstTime = currentArrivalTime;
 	//cout << selectedP.arrivalTime << " my arrival time" << endl;
 	// remove item from ready
 	int it = 0;
@@ -69,8 +81,14 @@ void updateMyP(p &selectedP, int &currentArrivalTime,vector <p> &ready,vector <p
 int nextBurst(vector <p> &ready, int &currentArrivalTime, vector <p> &pValue, vector <p> &IO)
 {
 	// select item P in ready queue for burst
+	if (ready.empty())
+	{
+		cout << endl << "Next Selected Burst" << endl << "----------------------" << endl;
+		cout << "IDLE" << endl << endl;;
+		return currentArrivalTime;
+	}
 	p selectedP = ready[0];
-	int lowestBurst = ready[0].cpuIO[0][0];
+	int lowestBurst = INT_M;
 	for (int i = 0; i < ready.size(); i++)
 	{
 		if (ready[i].cpuIO[0][0] <= lowestBurst)
@@ -105,7 +123,7 @@ int nextBurst(vector <p> &ready, int &currentArrivalTime, vector <p> &pValue, ve
 
 	return currentArrivalTime;
 }
-void updateMyQueue(vector <p> &ready, int currentArrivalTime, vector <p> &pValue, vector <p> &IO)
+void updateMyQueue(vector <p> &ready, int &currentArrivalTime, vector <p> &pValue, vector <p> &IO)
 {
 	//cout << endl << endl << pValue[8].id << " : " << pValue[8].arrivalTime << " ID/arrivalTime" << endl << endl;
 	//cout << endl << endl << currentArrivalTime << " Current Arrival time" << endl << endl;
@@ -115,7 +133,10 @@ void updateMyQueue(vector <p> &ready, int currentArrivalTime, vector <p> &pValue
 		//cout << pValue[i].arrivalTime << "-Arrival time : Current Arrival Time-" << currentArrivalTime << endl;
 		if (pValue[i].arrivalTime <= currentArrivalTime)
 		{
-			ready.push_back(pValue[i]);
+			if (!pValue[i].cpuIO.empty())
+			{
+				ready.push_back(pValue[i]);
+			}
 			// check if item is in the IO blocking state queue, if it is, remove it.
 			for (int j = 0; j < IO.size(); j++)
 			{
@@ -126,6 +147,24 @@ void updateMyQueue(vector <p> &ready, int currentArrivalTime, vector <p> &pValue
 			}
 		}
 	}
+	if (ready.empty())
+	{
+		int smallest = INT_M;
+		for (int i = 0; i < IO.size(); i++)
+		{
+			smallest = min(smallest, IO[i].arrivalTime);
+		}
+		//cout << "The queue is IDLE for " << smallest << " Time units" << endl
+		int temp = smallest - currentArrivalTime;
+		idleTime += temp;
+		cout << idleTime << endl;
+		//cout << smallest << endl;
+		currentArrivalTime = smallest;
+		//cout << currentArrivalTime << " new current arrival time" << endl;
+	}
+
+
+
 	cout << "Current Ready Queue" << endl << "----------------------" << endl;
 	for (int i = 0; i < ready.size(); i++)
 	{
@@ -138,6 +177,36 @@ void updateMyQueue(vector <p> &ready, int currentArrivalTime, vector <p> &pValue
 	}
 }
 
+void calculateAverages(vector <p> pValue)
+{
+	double RT = 0;
+	double TT = 0;
+	double WT = 0;
+
+	cout << "          RT    " << "TT      " << "WT     " << endl;
+	for (int i = 0; i < pValue.size(); i++)
+	{
+		cout << endl << pValue[i].id << ":   ";
+		RT += pValue[i].firstBurstTime;
+		cout << "    " << pValue[i].firstBurstTime;
+		TT += pValue[i].lastBurstTime;
+		cout << "    " << pValue[i].lastBurstTime;
+		WT += pValue[i].lastBurstTime - pValue[i].totalIOTime;
+		int temp = pValue[i].lastBurstTime - pValue[i].totalIOTime;
+		cout << "    " << temp << endl;
+	}
+	double util = (896 - idleTime);
+	util /= 896;
+	util *= 100;
+	cout << endl;
+	cout << "CPU UTILIZATION IS: " << util << " %" << endl;
+	cout << "Average RT is : " << RT / 9 << endl;
+	cout << "Average WT is : " << WT / 9 << endl;
+	cout << "Average TT is : " << TT / 9 << endl;
+	return;
+}
+
+
 void sjf(vector <p> &pValue, vector <p> &ready, vector <p> &IO)
 {
 	// declare initial arrival time - arrival = 0;
@@ -147,13 +216,16 @@ void sjf(vector <p> &pValue, vector <p> &ready, vector <p> &IO)
 
 	updateMyQueue(ready, arrivalTime, pValue, IO);
 	arrivalTime = nextBurst(ready, arrivalTime, pValue, IO);
-	while (arrivalTime <= 430)
+	while (arrivalTime <= 878)
 	{
 		updateMyQueue(ready, arrivalTime, pValue, IO); //- select item in ready and pass the arrival time
 		arrivalTime = nextBurst(ready, arrivalTime, pValue, IO);
 	}
-  
+	cout << "The Ending Arrival Time Is: " << arrivalTime << endl;
+	calculateAverages(pValue);
 }
+
+
 
 int main()
 {
